@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.pkl
+
+# Environments
+env/
+venv/
+.nestleenv/
+nestleenv/
+nestleenv310/
+.venv/
+*.env
+
+# VSCode
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Node
+node_modules/
+
+# FAISS or embedding outputs (optional)
+*.index
+*.npy
+*.json
