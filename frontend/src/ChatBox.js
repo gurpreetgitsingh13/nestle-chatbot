@@ -1,66 +1,82 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
+import './ChatBox.css';
 
 function ChatBox() {
-  const [query, setQuery] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [query, setQuery] = useState('');
+  const [chatLog, setChatLog] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const handleSend = async () => {
-    const userMsg = { sender: "user", text: query };
-    setMessages((prev) => [...prev, userMsg]);
+    if (!query.trim()) return;
+    const userMessage = { sender: 'You', message: query };
+    setChatLog(prev => [...prev, userMessage]);
+    setLoading(true);
 
-    const response = await fetch("http://localhost:8000/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query, top_k: 3 }),
-    });
+    try {
+      const response = await fetch('http://127.0.0.1:8000/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, top_k: 3 })
+      });
 
-    const data = await response.json();
-    const botMsg = {
-      sender: "bot",
-      text: data.results
-        .map(
-          (r) => `• **${r.title}**\n[${r.url}](${r.url})\n${r.snippet}`
-        )
-        .join("\n\n"),
-    };
+      const data = await response.json();
+      let botMessage;
 
-    setMessages((prev) => [...prev, botMsg]);
-    setQuery("");
+      if (data.results?.length > 0) {
+        botMessage = {
+          sender: 'Smartie',
+          message: data.results.map(r => ({ snippet: r.snippet }))
+        };
+      } else {
+        botMessage = {
+          sender: 'Smartie',
+          message: data.message || "Sorry, I couldn't find anything relevant."
+        };
+      }
+
+      setChatLog(prev => [...prev, botMessage]);
+    } catch (error) {
+      console.error('Error:', error);
+      setChatLog(prev => [...prev, {
+        sender: 'Smartie',
+        message: 'An error occurred. Please try again later.'
+      }]);
+    }
+
+    setLoading(false);
+    setQuery('');
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <div
-        style={{ maxHeight: 400, overflowY: "scroll", marginBottom: 10 }}
-      >
-        {messages.map((m, idx) => (
-          <div
-            key={idx}
-            style={{
-              margin: "10px 0",
-              textAlign: m.sender === "user" ? "right" : "left",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            <b>{m.sender === "user" ? "You" : "Nestlé AI"}:</b>
-            <div
-              dangerouslySetInnerHTML={{
-                __html: m.text.replace(/\n/g, "<br/>")
-              }}
-            />
+    <div className="chatbox-container">
+      <div className="chat-log">
+        {chatLog.map((entry, idx) => (
+          <div key={idx} className={`chat-entry ${entry.sender === 'You' ? 'user' : 'bot'}`}>
+            <strong>{entry.sender}:</strong>
+            {Array.isArray(entry.message) ? (
+              entry.message.map((item, i) => (
+                <div key={i} className="result-card">
+                  <p>{item.snippet}</p>
+                </div>
+              ))
+            ) : (
+              <p>{entry.message}</p>
+            )}
           </div>
         ))}
+        {loading && <div className="chat-entry bot">Smartie: <i>Typing...</i></div>}
       </div>
 
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        style={{ width: "80%" }}
-        onKeyDown={(e) => e.key === "Enter" && handleSend()}
-      />
-      <button onClick={handleSend}>Send</button>
+      <div className="input-container">
+        <input
+          type="text"
+          placeholder="Ask me about recipes, ingredients..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSend()}
+        />
+        <button onClick={handleSend}>Send</button>
+      </div>
     </div>
   );
 }

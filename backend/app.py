@@ -5,22 +5,39 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 import faiss
 import json
+import re
+from fastapi.responses import JSONResponse
+from pathlib import Path
 
-# === Load model and index once ===
+# === Load custom responses ===
+with open("/Users/gurpreetsingh/Desktop/Nestle/backend/custom_responses.json") as f:
+    custom_responses = json.load(f)
+
+def clean_snippet(text):
+    words = text.split()
+    seen = set()
+    cleaned_words = []
+    for word in words:
+        if word not in seen:
+            seen.add(word)
+            cleaned_words.append(word)
+    cleaned = " ".join(cleaned_words)
+    cleaned = re.sub(r"[^\w\s]", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:300] + "..." if len(cleaned) > 300 else cleaned
+
+# === Load FAISS index ===
 model = SentenceTransformer("paraphrase-MiniLM-L6-v2")
-
 print("🔁 Loading FAISS index...")
 index = faiss.read_index("scraper/nestle_faiss_full.index")
-
 with open("scraper/nestle_cleaned_full_embedded.json") as f:
     docs = json.load(f)
 
-# === FastAPI Setup ===
+# === FastAPI App Setup ===
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # replace with your frontend origin if needed
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"]
 )
@@ -31,27 +48,38 @@ class QueryRequest(BaseModel):
 
 @app.post("/chat")
 def chat(req: QueryRequest):
+    user_query = req.query.lower()
+
+    # === Custom Response Matching ===
+    for keyword, entry in custom_responses.items():
+        if keyword in user_query:
+            return {
+                "query": req.query,
+                "results": [{
+                    "title": "Custom Response",
+                    "url": "",
+                    "snippet": entry["response"]
+                }]
+            }
+
+    # === FAISS Vector Search as fallback ===
     query_vec = model.encode([req.query])
     D, I = index.search(np.array(query_vec), k=req.top_k)
 
     results = []
     for score, idx in zip(D[0], I[0]):
-        if score < 0.4:  # adjust if needed
-            doc = docs[idx]
-            results.append({
-                "title": doc.get("title", "No title"),
-                "url": doc.get("url", "#"),
-                "snippet": " ".join(dict.fromkeys(doc["text"].split()))[:300]
-            })
+        doc = docs[idx]
+        results.append({
+            "title": doc["title"],
+            "url": doc["url"],
+            "snippet": clean_snippet(doc["text"])
+        })
 
-    if not results:
-        return {
+    if results:
+        return {"query": req.query, "results": results}
+    else:
+        return JSONResponse(status_code=200, content={
             "query": req.query,
-            "results": [{
-                "title": "Sorry!",
-                "url": "#",
-                "snippet": "I couldn’t find any relevant Nestlé content for that. Try rephrasing or ask about a specific product or recipe."
-            }]
-        }
-
-    return {"query": req.query, "results": results}
+            "results": [],
+            "message": "Sorry, I couldn't find anything relevant."
+        })

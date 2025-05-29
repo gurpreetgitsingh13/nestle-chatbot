@@ -1,9 +1,9 @@
 import React from 'react';
 import './App.css';
-import ChatBox from './ChatBox';
+import SmartieWidget from './SmartieWidget';
 
 function App() {
-  return <ChatBox />;
+  return <SmartieWidget />;
 }
 
 export default App;
